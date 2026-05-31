@@ -1,0 +1,11 @@
+__pycache__/
+venv/
+.ipynb_checkpoints/
+data/raw/
+data/processed/
+mlruns/
+*.pkl
+*.joblib
+.env
+.pytest_cache/
+.vscode/
