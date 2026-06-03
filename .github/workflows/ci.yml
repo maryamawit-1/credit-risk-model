@@ -2,8 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build-and-test:
@@ -11,12 +10,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
@@ -24,16 +23,10 @@ jobs:
           pip install -r requirements.txt
           pip install flake8 pytest
 
-      # -------------------------
-      # LINT STEP
-      # -------------------------
-      - name: Run Linting (flake8)
+      - name: Run flake8 (lint check)
         run: |
-          flake8 src
+          flake8 src tests
 
-      # -------------------------
-      # TEST STEP
-      # -------------------------
-      - name: Run Tests (pytest)
+      - name: Run tests
         run: |
-          pytest -q
+          pytest -v
