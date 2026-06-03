@@ -8,6 +8,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
+from sklearn.cluster import KMeans
 
 from category_encoders.woe import WOEEncoder
 
@@ -83,6 +84,79 @@ def calculate_iv(df, feature, target):
 
     return iv_df["iv_component"].sum()
 
+# -----------------------------
+# TASK 4: RFM + PROXY TARGET
+# -----------------------------
+def create_rfm(df):
+    df = df.copy()
+
+    df["TransactionStartTime"] = pd.to_datetime(
+        df["TransactionStartTime"]
+    )
+
+    snapshot_date = (
+        df["TransactionStartTime"].max()
+        + pd.Timedelta(days=1)
+    )
+
+    rfm = df.groupby("CustomerId").agg(
+        Recency=(
+            "TransactionStartTime",
+            lambda x: (snapshot_date - x.max()).days
+        ),
+        Frequency=("TransactionStartTime", "count"),
+        Monetary=("Amount", "sum")
+    ).reset_index()
+
+    return rfm
+
+
+def assign_risk_clusters(rfm, n_clusters=3):
+    rfm_features = rfm[
+        ["Recency", "Frequency", "Monetary"]
+    ].copy()
+
+    rfm_features["Monetary"] = (
+        rfm_features["Monetary"].abs()
+    )
+
+    scaler = StandardScaler()
+
+    rfm_scaled = scaler.fit_transform(
+        rfm_features
+    )
+
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        random_state=42,
+        n_init=10
+    )
+
+    rfm["Cluster"] = kmeans.fit_predict(
+        rfm_scaled
+    )
+
+    cluster_summary = rfm.groupby(
+        "Cluster"
+    )[
+        ["Recency", "Frequency", "Monetary"]
+    ].mean()
+
+    cluster_summary["risk_score"] = (
+        cluster_summary["Recency"]
+        - cluster_summary["Frequency"]
+        - cluster_summary["Monetary"]
+    )
+
+    high_risk_cluster = (
+        cluster_summary["risk_score"].idxmax()
+    )
+
+    rfm["is_high_risk"] = (
+        rfm["Cluster"] == high_risk_cluster
+    ).astype(int)
+
+    return rfm[["CustomerId", "is_high_risk"]]
 
 # -----------------------------
 # Pipeline
@@ -148,10 +222,45 @@ def build_pipeline():
 # -----------------------------
 if __name__ == "__main__":
 
+    # df = pd.read_csv("data/raw/data.csv")
+
+    # X = df.drop("FraudResult", axis=1)
+    # y = df["FraudResult"]
+
+    # pipeline = build_pipeline()
+
+    # X_processed = pipeline.fit_transform(X, y)
+
     df = pd.read_csv("data/raw/data.csv")
 
-    X = df.drop("FraudResult", axis=1)
-    y = df["FraudResult"]
+    # -----------------------------
+    # TASK 4: CREATE PROXY TARGET
+    # -----------------------------
+    rfm = create_rfm(df)
+
+    rfm_labels = assign_risk_clusters(rfm)
+
+    df_with_target = df.merge(
+        rfm_labels,
+        on="CustomerId",
+        how="left"
+    )
+
+    df_with_target["is_high_risk"] = (
+        df_with_target["is_high_risk"]
+        .fillna(0)
+        .astype(int)
+    )
+
+    # -----------------------------
+    # MODEL FEATURES + TARGET
+    # -----------------------------
+    X = df_with_target.drop(
+        ["FraudResult", "is_high_risk"],
+        axis=1
+    )
+
+    y = df_with_target["is_high_risk"]
 
     pipeline = build_pipeline()
 
@@ -166,6 +275,8 @@ if __name__ == "__main__":
         X_processed.toarray() if hasattr(X_processed, "toarray") else X_processed,
         columns=feature_names
     )
+
+    X_processed_df["is_high_risk"] = y.values
 
     # -----------------------------
     # Save processed data + model
@@ -199,4 +310,6 @@ if __name__ == "__main__":
 
     iv_df.to_csv("data/processed/iv_values.csv", index=False)
 
-    print("Task 3 Feature Engineering completed successfully.")
+    print(
+        "Task 4 Feature Engineering and Proxy Target Creation completed successfully."
+    )
