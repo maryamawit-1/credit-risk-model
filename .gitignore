@@ -1,4 +1,5 @@
 __pycache__/
+*.pyc
 venv/
 .ipynb_checkpoints/
 data/raw/
@@ -9,3 +10,4 @@ mlruns/
 .env
 .pytest_cache/
 .vscode/
+mlflow.db
